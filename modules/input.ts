@@ -3,6 +3,7 @@ import Module from '../core/module';
 import Quill from '../core/quill';
 import type { Range } from '../core/selection';
 import { deleteRange } from './keyboard';
+import { BlockBlot } from 'parchment';
 
 const INSERT_TYPES = ['insertText', 'insertReplacementText'];
 
@@ -11,6 +12,44 @@ class Input extends Module {
     super(quill, options);
 
     quill.root.addEventListener('beforeinput', (event) => {
+      if (event.inputType === 'insertText') {
+        const staticRange = event.getTargetRanges
+          ? event.getTargetRanges()[0]
+          : null;
+        if (staticRange?.collapsed === true) {
+          const text = getPlainTextFromInputEvent(event);
+          if (text) {
+            const normalized =
+              this.quill.selection.normalizeNative(staticRange);
+            const range = normalized
+              ? this.quill.selection.normalizedToRange(normalized)
+              : null;
+            if (range?.length === 0) {
+              const [line, offset] = quill.getLine(range.index);
+              if (
+                offset === 0 &&
+                line instanceof BlockBlot &&
+                range.index - 1 >= 0
+              ) {
+                const formats = quill.getFormat(range.index - 1);
+                quill.insertText(
+                  range.index,
+                  text,
+                  formats,
+                  Quill.sources.USER,
+                );
+                quill.setSelection(
+                  range.index + text.length,
+                  0,
+                  Quill.sources.SILENT,
+                );
+                event.preventDefault();
+                return;
+              }
+            }
+          }
+        }
+      }
       this.handleBeforeInput(event);
     });
 
